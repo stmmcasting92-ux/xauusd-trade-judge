@@ -1,0 +1,56 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#08101d"><link rel="manifest" href="manifest.json"><title>XAUUSD Trade Judge</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#08101d;color:#f5f7fb;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:760px;margin:auto;padding:16px 13px 70px}.card{background:#111c2e;border:1px solid #25344d;border-radius:16px;padding:14px;margin:11px 0}.title{font-weight:800;margin-bottom:8px}.sub{color:#9fb0c9;font-size:12px;line-height:1.5}.row{display:grid;grid-template-columns:105px 1fr;gap:8px;align-items:center;margin:8px 0}.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.seg button,.pt{background:#0b1424;color:#9fb0c9;border:1px solid #25344d;border-radius:10px;padding:9px}.on.up{background:#123a2b;color:#72e6ad}.on.down{background:#401c25;color:#ff9aa5}.on.flat{background:#24334a;color:#fff}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}input[type=number],select{width:100%;padding:9px;background:#0b1424;color:#fff;border:1px solid #25344d;border-radius:9px}.ck{display:flex;gap:8px;margin:9px 0;font-size:14px}.pts{display:grid;gap:6px}.pt{text-align:left}.pt.long{background:#123a2b;color:#72e6ad}.pt.short{background:#401c25;color:#ff9aa5}.result{text-align:center}.judge{font-size:34px;font-weight:900}.good{color:#24c77a}.bad{color:#ff5c6c}.neutral{color:#9fb0c9}.warn{color:#f5b942}.alert{padding:11px;border-radius:11px;background:#182438;font-size:13px;line-height:1.5;margin-top:9px}.meter{height:8px;background:#08101d;border-radius:9px;overflow:hidden;margin:10px}.meter div{height:100%;background:#58a6ff}.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.actions button{border:0;border-radius:11px;padding:12px;font-weight:800;color:#fff}.reset{background:#202c40}.save{background:#2f81f7}
+</style></head><body><main>
+<h1 style="margin:0">XAUUSD Trade Judge</h1><div class="sub">Point 1–9 / MTF / Zone × EMA · Ver.1.1</div>
+
+<div class="card"><div class="title">① 上位足・中期足</div><div class="sub">4H・1Hを方向の土台、15m・5mを中期確認として扱います。</div><div id="tf"></div></div>
+
+<div class="card"><div class="title">② 水平線・ゾーン</div><div class="grid">
+<label class="sub">現在価格<input id="price" type="number" step=".01"></label><label class="sub">ゾーン足<select id="zoneTf"><option>なし</option><option>1H</option><option>4H</option><option>日足</option><option>週足</option><option>月足</option></select></label>
+<label class="sub">ゾーン下限<input id="zl" type="number" step=".01"></label><label class="sub">ゾーン上限<input id="zh" type="number" step=".01"></label></div>
+<label class="ck"><input id="react2" type="checkbox">2回以上反応している</label><label class="ck"><input id="multi" type="checkbox">複数時間足ゾーンが重なる</label><label class="ck"><input id="reaction" type="checkbox">到達後の反応を確認</label></div>
+
+<div class="card"><div class="title">③ EMA20 / 75 / 200</div><div id="emas"></div>
+<label class="ck"><input id="zoneEma" type="checkbox"><b>水平線ゾーン × EMAが重なる</b></label><label class="ck"><input id="touch200" type="checkbox">200EMA付近へ到達</label><label class="ck"><input id="hold" type="checkbox">狙う方向へEMA反発・維持</label></div>
+
+<div class="card"><div class="title">④ Point 1〜9</div><div class="sub">タップ：なし → LONG → SHORT。単純な1票ではなくセットアップとして評価。</div><div class="pts" id="pts"></div></div>
+
+<div class="card"><div class="title">⑤ 1分足タイミング</div>
+<label class="ck"><input id="wick" type="checkbox">重要ゾーン/EMAで髭・拒否反応</label><label class="ck"><input id="揉み" type="checkbox">200EMA付近などで揉み合い</label><label class="ck"><input id="closeBreak" type="checkbox">終値でブレイク</label><label class="ck"><input id="next" type="checkbox">次足もブレイク側を維持</label><label class="ck"><input id="retest" type="checkbox">リテスト成功・レンジ内へ戻らない</label>
+</div>
+
+<div class="card result"><div class="sub">総合判定</div><div id="judge" class="judge neutral">WAIT</div><div id="detail" class="sub"></div><div class="meter"><div id="meter"></div></div><div id="alert" class="alert">上位足 → 場所 → セットアップ → 1分足タイミングの順で判定します。</div></div>
+
+<div class="card"><div class="title">Ver.1の考え方</div><div class="sub">水平線は方向ではなく「場所」。ゾーン×EMAを強く評価。上位足に逆らう1分足だけではエントリー候補にしません。XAUUSD版は水平線・ゾーンとEMA20/75/200、マルチタイム分析、Point 1〜9だけで判定します。APS・TAKEO・TAKEKOは使用しません。</div><div class="actions"><button id="reset" class="reset">リセット</button><button id="save" class="save">保存・再判定</button></div></div>
+</main><script>
+const S={h4:"flat",h1:"flat",m15:"flat",m5:"flat",e20:"flat",e75:"flat",e200:"flat"}, P={};
+const pdefs=[["P1","重要ライン/EMA付近の反応"],["P2","収縮・揉み合いからの展開"],["P3","転換：レンジ抜け＋MAクロス"],["P4","上昇→上昇：押し目"],["P5","下降→下降：戻り売り"],["P6","1分足200EMAタッチ後の揉み"],["P7","直近高安値・ダウ理論"],["P8","マルチタイム分析"],["P9","ダブルトップ等＋200EMA"]];
+function addSeg(parent,k,n){parent.insertAdjacentHTML("beforeend",`<div class="row"><span>${n}</span><div class="seg" data-k="${k}"><button data-v="up">↑</button><button data-v="flat">−</button><button data-v="down">↓</button></div></div>`)}
+let tf=document.getElementById("tf");[["h4","4H"],["h1","1H"],["m15","15m"],["m5","5m"]].forEach(x=>addSeg(tf,...x));
+let em=document.getElementById("emas");[["e20","EMA20"],["e75","EMA75"],["e200","EMA200"]].forEach(x=>addSeg(em,...x));
+function paintSeg(el){el.querySelectorAll("button").forEach(b=>{b.className=b.dataset.v===S[el.dataset.k]?"on "+b.dataset.v:""})}
+document.querySelectorAll(".seg").forEach(el=>{if(!S[el.dataset.k])S[el.dataset.k]="flat";el.querySelectorAll("button").forEach(b=>b.onclick=()=>{S[el.dataset.k]=b.dataset.v;paintSeg(el);calc()});paintSeg(el)});
+let pe=document.getElementById("pts");pdefs.forEach(([k,d])=>{P[k]=0;pe.insertAdjacentHTML("beforeend",`<button class="pt" id="${k}"><b>${k}</b>　${d}</button>`);document.getElementById(k).onclick=()=>{P[k]=(P[k]+1)%3;paintP(k);calc()}});
+function paintP(k){let e=document.getElementById(k);e.className="pt "+(P[k]===1?"long":P[k]===2?"short":"");e.querySelector("b").textContent=k+(P[k]===1?" LONG":P[k]===2?" SHORT":"")}
+const ck=id=>document.getElementById(id).checked, nm=id=>{let v=parseFloat(document.getElementById(id).value);return Number.isFinite(v)?v:null};
+function calc(){
+ let L=0,D=0;const w={h4:4,h1:4,m15:2,m5:1,e20:1,e75:2,e200:3};for(let k in w){if(S[k]=="up")L+=w[k];if(S[k]=="down")D+=w[k]}
+ let pL=0,pD=0;Object.values(P).forEach(v=>{if(v===1)pL++;if(v===2)pD++});L+=pL*2;D+=pD*2;
+ let pr=nm("price"),lo=nm("zl"),hi=nm("zh"),inz=pr!=null&&lo!=null&&hi!=null&&pr>=Math.min(lo,hi)&&pr<=Math.max(lo,hi);
+ let loc=(inz?2:0)+(ck("react2")?1:0)+(ck("multi")?2:0)+(ck("reaction")?2:0)+(ck("zoneEma")?3:0)+(ck("touch200")?2:0)+(ck("hold")?1:0);
+ let timing=["wick","揉み","closeBreak","next","retest"].filter(ck).length, diff=L-D;
+ let conflict=(S.h4=="up"&&S.h1=="down")||(S.h4=="down"&&S.h1=="up"), out="WAIT",cl="neutral";
+ let lc=(S.h4=="up"||S.h1=="up")&&S.h4!="down"&&S.h1!="down", sc=(S.h4=="down"||S.h1=="down")&&S.h4!="up"&&S.h1!="up";
+ if(!conflict&&lc&&diff>=3&&loc>=3&&(pL>0||ck("zoneEma"))&&timing>=1){out="LONG候補";cl="good"}
+ if(!conflict&&sc&&diff<=-3&&loc>=3&&(pD>0||ck("zoneEma"))&&timing>=1){out="SHORT候補";cl="bad"}
+ let j=document.getElementById("judge");j.textContent=out;j.className="judge "+cl;document.getElementById("detail").textContent=`方向差 ${diff>0?"+":""}${diff} ｜ 場所 ${loc} ｜ 1分足 ${timing} ｜ Point L${pL}:S${pD}`;
+ document.getElementById("meter").style.width=Math.min(100,Math.abs(diff)*3+loc*5+timing*6+Math.max(pL,pD)*5)+"%";
+ let a=document.getElementById("alert");if(conflict)a.textContent="4Hと1Hが逆方向。上位足の整理待ち。";else if(out=="LONG候補")a.textContent="買い側で環境・場所・形・タイミングが一致。直近高値、上髭、EMA実体割れ等の無効化条件を確認。";else if(out=="SHORT候補")a.textContent="売り側で環境・場所・形・タイミングが一致。直近安値、下髭、戻り高値超え等の無効化条件を確認。";else a.textContent=loc<3?"WAIT：まず重要ゾーン/EMAなど「場所」を待ちます。":timing<1?"WAIT：場所は候補。1分足の反応を待ちます。":"WAIT：上位足方向とセットアップの一致待ち。";
+}
+function data(){return {S,P,F:Object.fromEntries([...document.querySelectorAll("input,select")].map(e=>[e.id,e.type=="checkbox"?e.checked:e.value]))}}
+document.getElementById("save").onclick=()=>{localStorage.setItem("xau-v1",JSON.stringify(data()));calc()};
+document.getElementById("reset").onclick=()=>{if(confirm("リセットしますか？")){localStorage.removeItem("xau-v1");location.reload()}};
+try{let d=JSON.parse(localStorage.getItem("xau-v1"));if(d){Object.assign(S,d.S||{});Object.assign(P,d.P||{});Object.entries(d.F||{}).forEach(([k,v])=>{let e=document.getElementById(k);if(e)e.type=="checkbox"?e.checked=v:e.value=v});document.querySelectorAll(".seg").forEach(paintSeg);Object.keys(P).forEach(paintP)}}catch(e){}
+document.querySelectorAll("input,select").forEach(e=>e.onchange=calc);calc();if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
+</script></body></html>

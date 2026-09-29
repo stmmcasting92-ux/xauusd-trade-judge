@@ -1,0 +1,1 @@
+const C='xau-v1-1-no-aps';self.addEventListener('install',e=>e.waitUntil(caches.open(C).then(x=>x.addAll(['./','./index.html','./manifest.json']))));self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request))));
