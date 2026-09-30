@@ -1,138 +1,107 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#08101d"><link rel="manifest" href="manifest.json"><title>XAUUSD Trade Judge</title>
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#08101d">
+<link rel="manifest" href="manifest.json">
+<title>XAUUSD JUDGE</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#08101d;color:#f5f7fb;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:760px;margin:auto;padding:16px 13px 70px}.card{background:#111c2e;border:1px solid #25344d;border-radius:16px;padding:14px;margin:11px 0}.title{font-weight:800;margin-bottom:8px}.sub{color:#9fb0c9;font-size:12px;line-height:1.5}.row{display:grid;grid-template-columns:105px 1fr;gap:8px;align-items:center;margin:8px 0}.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.seg button,.pt{background:#0b1424;color:#9fb0c9;border:1px solid #25344d;border-radius:10px;padding:9px}.on.up{background:#123a2b;color:#72e6ad}.on.down{background:#401c25;color:#ff9aa5}.on.flat{background:#24334a;color:#fff}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}input[type=number],select{width:100%;padding:9px;background:#0b1424;color:#fff;border:1px solid #25344d;border-radius:9px}.ck{display:flex;gap:8px;margin:9px 0;font-size:14px}.pts{display:grid;gap:6px}.pt{text-align:left}.pt.long{background:#123a2b;color:#72e6ad}.pt.short{background:#401c25;color:#ff9aa5}.result{text-align:center}.judge{font-size:34px;font-weight:900}.good{color:#24c77a}.bad{color:#ff5c6c}.neutral{color:#9fb0c9}.warn{color:#f5b942}.alert{padding:11px;border-radius:11px;background:#182438;font-size:13px;line-height:1.5;margin-top:9px}.meter{height:8px;background:#08101d;border-radius:9px;overflow:hidden;margin:10px}.meter div{height:100%;background:#58a6ff}.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.actions button{border:0;border-radius:11px;padding:12px;font-weight:800;color:#fff}.reset{background:#202c40}.save{background:#2f81f7}
-</style></head><body><main>
-<h1 style="margin:0">XAUUSD Trade Judge</h1><div class="sub">Point 1–9 / MTF / Zone × EMA · Ver.1.1</div>
+*{box-sizing:border-box}
+body{margin:0;background:#08101d;color:#f5f7fb;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:720px;margin:auto;padding:18px 14px 70px}
+h1{margin:0;font-size:25px} .sub{color:#9fb0c9;font-size:12px}
+.card{background:#111c2e;border:1px solid #25344d;border-radius:18px;padding:16px;margin:12px 0}
+.hero{text-align:center;padding:24px 14px}
+.price{font-size:42px;font-weight:850;letter-spacing:.5px;margin:10px 0}
+.judge{font-size:34px;font-weight:900;margin:8px 0}
+.long{color:#72e6ad} .short{color:#ff7d8b} .wait{color:#f5b942}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.tf,.metric{background:#0b1424;border:1px solid #25344d;border-radius:12px;padding:12px}
+.tf b{float:right} .up{color:#72e6ad} .down{color:#ff7d8b} .flat{color:#c4cedd}
+.row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #25344d}
+.row:last-child{border-bottom:0}
+.label{color:#9fb0c9}
+.reason{line-height:1.55;color:#dbe5f5}
+.status{display:flex;justify-content:center;align-items:center;gap:7px;margin-top:12px;color:#9fb0c9;font-size:12px}
+.dot{width:9px;height:9px;border-radius:50%;background:#24c77a;box-shadow:0 0 10px #24c77a}
+.dot.err{background:#ff5c6c;box-shadow:none}
+.small{font-size:11px;color:#71839e;margin-top:8px;text-align:center}
+</style>
+</head>
+<body><main>
+<h1>XAUUSD JUDGE</h1>
+<div class="sub">TradingView → Cloudflare Worker → Live PWA</div>
 
-<div class="card"><div class="title">① 上位足・中期足</div><div class="sub">4H・1Hを方向の土台、15m・5mを中期確認として扱います。</div><div id="tf"></div></div>
-
-<div class="card"><div class="title">② 水平線・ゾーン</div><div class="grid">
-<label class="sub">現在価格<input id="price" type="number" step=".01"></label><label class="sub">ゾーン足<select id="zoneTf"><option>なし</option><option>1H</option><option>4H</option><option>日足</option><option>週足</option><option>月足</option></select></label>
-<label class="sub">ゾーン下限<input id="zl" type="number" step=".01"></label><label class="sub">ゾーン上限<input id="zh" type="number" step=".01"></label></div>
-<label class="ck"><input id="react2" type="checkbox">2回以上反応している</label><label class="ck"><input id="multi" type="checkbox">複数時間足ゾーンが重なる</label><label class="ck"><input id="reaction" type="checkbox">到達後の反応を確認</label></div>
-
-<div class="card"><div class="title">③ EMA20 / 75 / 200</div><div id="emas"></div>
-<label class="ck"><input id="zoneEma" type="checkbox"><b>水平線ゾーン × EMAが重なる</b></label><label class="ck"><input id="touch200" type="checkbox">200EMA付近へ到達</label><label class="ck"><input id="hold" type="checkbox">狙う方向へEMA反発・維持</label></div>
-
-<div class="card"><div class="title">④ Point 1〜9</div><div class="sub">タップ：なし → LONG → SHORT。単純な1票ではなくセットアップとして評価。</div><div class="pts" id="pts"></div></div>
-
-<div class="card"><div class="title">⑤ 1分足タイミング</div>
-<label class="ck"><input id="wick" type="checkbox">重要ゾーン/EMAで髭・拒否反応</label><label class="ck"><input id="揉み" type="checkbox">200EMA付近などで揉み合い</label><label class="ck"><input id="closeBreak" type="checkbox">終値でブレイク</label><label class="ck"><input id="next" type="checkbox">次足もブレイク側を維持</label><label class="ck"><input id="retest" type="checkbox">リテスト成功・レンジ内へ戻らない</label>
+<div class="card hero">
+  <div class="sub">CURRENT PRICE</div>
+  <div id="price" class="price">----</div>
+  <div id="judge" class="judge wait">WAIT</div>
+  <div id="reason" class="reason">データ取得中...</div>
+  <div class="status"><span id="dot" class="dot"></span><span id="live">CONNECTING</span></div>
+  <div id="updated" class="small"></div>
 </div>
 
-<div class="card result"><div class="sub">総合判定</div><div id="judge" class="judge neutral">WAIT</div><div id="detail" class="sub"></div><div class="meter"><div id="meter"></div></div><div id="alert" class="alert">上位足 → 場所 → セットアップ → 1分足タイミングの順で判定します。</div></div>
+<div class="card">
+  <div class="sub" style="margin-bottom:10px">MULTI TIMEFRAME</div>
+  <div class="grid">
+    <div class="tf">4H <b id="h4">--</b></div>
+    <div class="tf">1H <b id="h1">--</b></div>
+    <div class="tf">15M <b id="m15">--</b></div>
+    <div class="tf">5M <b id="m5">--</b></div>
+  </div>
+</div>
 
-<div class="card"><div class="title">Ver.1の考え方</div><div class="sub">水平線は方向ではなく「場所」。ゾーン×EMAを強く評価。上位足に逆らう1分足だけではエントリー候補にしません。XAUUSD版は水平線・ゾーンとEMA20/75/200、マルチタイム分析、Point 1〜9だけで判定します。APS・TAKEO・TAKEKOは使用しません。</div><div class="actions"><button id="reset" class="reset">リセット</button><button id="save" class="save">保存・再判定</button></div></div>
-</main><script>
-const S={h4:"flat",h1:"flat",m15:"flat",m5:"flat",e20:"flat",e75:"flat",e200:"flat"}, P={};
-const pdefs=[["P1","重要ライン/EMA付近の反応"],["P2","収縮・揉み合いからの展開"],["P3","転換：レンジ抜け＋MAクロス"],["P4","上昇→上昇：押し目"],["P5","下降→下降：戻り売り"],["P6","1分足200EMAタッチ後の揉み"],["P7","直近高安値・ダウ理論"],["P8","マルチタイム分析"],["P9","ダブルトップ等＋200EMA"]];
-function addSeg(parent,k,n){parent.insertAdjacentHTML("beforeend",`<div class="row"><span>${n}</span><div class="seg" data-k="${k}"><button data-v="up">↑</button><button data-v="flat">−</button><button data-v="down">↓</button></div></div>`)}
-let tf=document.getElementById("tf");[["h4","4H"],["h1","1H"],["m15","15m"],["m5","5m"]].forEach(x=>addSeg(tf,...x));
-let em=document.getElementById("emas");[["e20","EMA20"],["e75","EMA75"],["e200","EMA200"]].forEach(x=>addSeg(em,...x));
-function paintSeg(el){el.querySelectorAll("button").forEach(b=>{b.className=b.dataset.v===S[el.dataset.k]?"on "+b.dataset.v:""})}
-document.querySelectorAll(".seg").forEach(el=>{if(!S[el.dataset.k])S[el.dataset.k]="flat";el.querySelectorAll("button").forEach(b=>b.onclick=()=>{S[el.dataset.k]=b.dataset.v;paintSeg(el);calc()});paintSeg(el)});
-let pe=document.getElementById("pts");pdefs.forEach(([k,d])=>{P[k]=0;pe.insertAdjacentHTML("beforeend",`<button class="pt" id="${k}"><b>${k}</b>　${d}</button>`);document.getElementById(k).onclick=()=>{P[k]=(P[k]+1)%3;paintP(k);calc()}});
-function paintP(k){let e=document.getElementById(k);e.className="pt "+(P[k]===1?"long":P[k]===2?"short":"");e.querySelector("b").textContent=k+(P[k]===1?" LONG":P[k]===2?" SHORT":"")}
-const ck=id=>document.getElementById(id).checked, nm=id=>{let v=parseFloat(document.getElementById(id).value);return Number.isFinite(v)?v:null};
-function calc(){
- let L=0,D=0;const w={h4:4,h1:4,m15:2,m5:1,e20:1,e75:2,e200:3};for(let k in w){if(S[k]=="up")L+=w[k];if(S[k]=="down")D+=w[k]}
- let pL=0,pD=0;Object.values(P).forEach(v=>{if(v===1)pL++;if(v===2)pD++});L+=pL*2;D+=pD*2;
- let pr=nm("price"),lo=nm("zl"),hi=nm("zh"),inz=pr!=null&&lo!=null&&hi!=null&&pr>=Math.min(lo,hi)&&pr<=Math.max(lo,hi);
- let loc=(inz?2:0)+(ck("react2")?1:0)+(ck("multi")?2:0)+(ck("reaction")?2:0)+(ck("zoneEma")?3:0)+(ck("touch200")?2:0)+(ck("hold")?1:0);
- let timing=["wick","揉み","closeBreak","next","retest"].filter(ck).length, diff=L-D;
- let conflict=(S.h4=="up"&&S.h1=="down")||(S.h4=="down"&&S.h1=="up"), out="WAIT",cl="neutral";
- let lc=(S.h4=="up"||S.h1=="up")&&S.h4!="down"&&S.h1!="down", sc=(S.h4=="down"||S.h1=="down")&&S.h4!="up"&&S.h1!="up";
- if(!conflict&&lc&&diff>=3&&loc>=3&&(pL>0||ck("zoneEma"))&&timing>=1){out="LONG候補";cl="good"}
- if(!conflict&&sc&&diff<=-3&&loc>=3&&(pD>0||ck("zoneEma"))&&timing>=1){out="SHORT候補";cl="bad"}
- let j=document.getElementById("judge");j.textContent=out;j.className="judge "+cl;document.getElementById("detail").textContent=`方向差 ${diff>0?"+":""}${diff} ｜ 場所 ${loc} ｜ 1分足 ${timing} ｜ Point L${pL}:S${pD}`;
- document.getElementById("meter").style.width=Math.min(100,Math.abs(diff)*3+loc*5+timing*6+Math.max(pL,pD)*5)+"%";
- let a=document.getElementById("alert");if(conflict)a.textContent="4Hと1Hが逆方向。上位足の整理待ち。";else if(out=="LONG候補")a.textContent="買い側で環境・場所・形・タイミングが一致。直近高値、上髭、EMA実体割れ等の無効化条件を確認。";else if(out=="SHORT候補")a.textContent="売り側で環境・場所・形・タイミングが一致。直近安値、下髭、戻り高値超え等の無効化条件を確認。";else a.textContent=loc<3?"WAIT：まず重要ゾーン/EMAなど「場所」を待ちます。":timing<1?"WAIT：場所は候補。1分足の反応を待ちます。":"WAIT：上位足方向とセットアップの一致待ち。";
+<div class="card">
+  <div class="row"><span class="label">EMA20</span><b id="ema20">--</b></div>
+  <div class="row"><span class="label">EMA75</span><b id="ema75">--</b></div>
+  <div class="row"><span class="label">EMA200</span><b id="ema200">--</b></div>
+  <div class="row"><span class="label">EMA200接近</span><b id="near">--</b></div>
+  <div class="row"><span class="label">環境</span><b id="env">--</b></div>
+</div>
+
+<div class="card">
+  <div class="row"><span class="label">1H Zone High</span><b id="zh">--</b></div>
+  <div class="row"><span class="label">1H Zone Low</span><b id="zl">--</b></div>
+  <div class="row"><span class="label">受信時刻</span><b id="received">--</b></div>
+</div>
+
+<div class="small">10秒ごとに自動更新</div>
+</main>
+<script>
+const API="https://xauusd-judge-webhook.stmm-casting92.workers.dev/";
+const $=id=>document.getElementById(id);
+const val=v=>(v===undefined||v===null||v==="")?"--":v;
+function dir(id,v){
+  const e=$(id), s=String(v||"").toUpperCase();
+  e.textContent=s||"--";
+  e.className=s==="UP"?"up":s==="DOWN"?"down":"flat";
 }
-function data(){return {S,P,F:Object.fromEntries([...document.querySelectorAll("input,select")].map(e=>[e.id,e.type=="checkbox"?e.checked:e.value]))}}
-document.getElementById("save").onclick=()=>{localStorage.setItem("xau-v1",JSON.stringify(data()));calc()};
-document.getElementById("reset").onclick=()=>{if(confirm("リセットしますか？")){localStorage.removeItem("xau-v1");location.reload()}};
-try{let d=JSON.parse(localStorage.getItem("xau-v1"));if(d){Object.assign(S,d.S||{});Object.assign(P,d.P||{});Object.entries(d.F||{}).forEach(([k,v])=>{let e=document.getElementById(k);if(e)e.type=="checkbox"?e.checked=v:e.value=v});document.querySelectorAll(".seg").forEach(paintSeg);Object.keys(P).forEach(paintP)}}catch(e){}
-document.querySelectorAll("input,select").forEach(e=>e.onchange=calc);calc();if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
-const WORKER_URL = "https://xauusd-judge-webhook.stmm-casting92.workers.dev";
-
-async function syncXAU(){
-  try{
-    const r = await fetch(WORKER_URL,{cache:"no-store"});
-    const x = await r.json();
-    const d = x.latest;
-    if(!d) return;
-
-    // 現在価格
-    const price = document.getElementById("price");
-    if(price && d.price) price.value = d.price;
-
-    // 上位足～下位足
-    const mapTF = {
-      h4: d["4h"],
-      h1: d["1h"],
-      m15: d["15m"],
-      m5: d["5m"]
-    };
-
-    Object.entries(mapTF).forEach(([k,v])=>{
-      if(!v) return;
-      const z = String(v).toUpperCase();
-      S[k] = z==="UP" ? "up" : z==="DOWN" ? "down" : "flat";
-    });
-
-    // EMA20 / 75 / 200
-const priceNow = Number(d.price);
-const ema20Now = Number(d.ema20);
-const ema75Now = Number(d.ema75);
-const ema200Now = Number(d.ema200);
-
-if(Number.isFinite(priceNow)){
-  if(Number.isFinite(ema20Now))
-    S.e20 = priceNow > ema20Now ? "up" : priceNow < ema20Now ? "down" : "flat";
-
-  if(Number.isFinite(ema75Now))
-    S.e75 = priceNow > ema75Now ? "up" : priceNow < ema75Now ? "down" : "flat";
-
-  if(Number.isFinite(ema200Now))
-    S.e200 = priceNow > ema200Now ? "up" : priceNow < ema200Now ? "down" : "flat";
+function fmt(v){
+  const n=Number(v); return Number.isFinite(n)?n.toFixed(2):val(v);
 }
-   // EMA200付近
-    const near200 =
-      d.near_ema200 === true ||
-      String(d.near_ema200).toLowerCase() === "true";
-
-    // 水平線ゾーン × EMA20/75/200 重なり自動判定
-const zoneLow = Number(document.getElementById("zl")?.value);
-const zoneHigh = Number(document.getElementById("zh")?.value);
-
-const validZone =
-  Number.isFinite(zoneLow) &&
-  Number.isFinite(zoneHigh) &&
-  zoneLow > 0 &&
-  zoneHigh > 0;
-
-const low = validZone ? Math.min(zoneLow, zoneHigh) : NaN;
-const high = validZone ? Math.max(zoneLow, zoneHigh) : NaN;
-
-const emaInZone =
-  validZone &&
-  (
-    (Number.isFinite(ema20Now) && ema20Now >= low && ema20Now <= high) ||
-    (Number.isFinite(ema75Now) && ema75Now >= low && ema75Now <= high) ||
-    (Number.isFinite(ema200Now) && ema200Now >= low && ema200Now <= high)
-  );
-
-const zoneEma = document.getElementById("zoneEma");
-if(zoneEma) zoneEma.checked = emaInZone;
-
-    document.querySelectorAll(".seg").forEach(paintSeg);
-    calc();
-
-  }catch(e){
-    console.log("XAU sync error",e);
+async function refresh(){
+  try {
+    const r=await fetch(API+"?t="+Date.now(),{cache:"no-store"});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const j=await r.json(), d=j.latest||j;
+    $("price").textContent=fmt(d.price);
+    const judge=String(d.judge||"WAIT").toUpperCase();
+    $("judge").textContent=judge;
+    $("judge").className="judge "+(judge==="LONG"?"long":judge==="SHORT"?"short":"wait");
+    $("reason").textContent=d.reason||"判定待ち";
+    dir("h4",d["4h"]); dir("h1",d["1h"]); dir("m15",d["15m"]); dir("m5",d["5m"]);
+    $("ema20").textContent=fmt(d.ema20); $("ema75").textContent=fmt(d.ema75); $("ema200").textContent=fmt(d.ema200);
+    $("near").textContent=val(d.near_ema200); dir("env",d.environment);
+    $("zh").textContent=val(d.zone_high_1h); $("zl").textContent=val(d.zone_low_1h);
+    $("received").textContent=d.received_at?new Date(d.received_at).toLocaleTimeString("ja-JP"): "--";
+    $("updated").textContent="画面更新 "+new Date().toLocaleTimeString("ja-JP");
+    $("live").textContent="LIVE"; $("dot").className="dot";
+  } catch(e) {
+    $("live").textContent="CONNECTION ERROR"; $("dot").className="dot err";
+    $("updated").textContent=String(e);
   }
 }
-
-syncXAU();
-setInterval(syncXAU,2500);
+refresh(); setInterval(refresh,10000);
+if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
 </script></body></html>

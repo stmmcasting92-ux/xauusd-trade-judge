@@ -1,1 +1,8 @@
-{"name": "XAUUSD Trade Judge", "short_name": "XAU Judge", "start_url": "./", "display": "standalone", "background_color": "#08101d", "theme_color": "#08101d"}
+{
+  "name": "XAUUSD JUDGE Live",
+  "short_name": "XAU JUDGE",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#08101d",
+  "theme_color": "#08101d"
+}
