@@ -78,7 +78,7 @@ h1{margin:0;font-size:25px} .sub{color:#9fb0c9;font-size:12px}
 <div class="card"><div class="section-title">1分足タイミング</div><div class="timing">
 <button data-timing="reject" disabled>拒否反応</button><button data-timing="range" disabled>揉み合い</button>
 <button data-timing="break" disabled>終値ブレイク</button><button data-timing="hold" disabled>次足維持</button>
-<button data-timing="retest">リテスト成功</button></div></div>
+<button data-timing="retest" disabled>リテスト成功</button></div></div>
 <div class="card finalbox"><div class="section-title">FINAL JUDGE</div>
 <div id="finalJudge" class="final-judge wait">WAIT</div><div id="finalReason" class="reason">データ取得中...</div></div>
 
@@ -104,7 +104,7 @@ function syncAutoStates(d){
   const p1=document.querySelector('#points input[data-point="1"]');
   const p1box=$("p1box");
   if(p1){p1.checked=isYes(d.p1);p1box.classList.toggle("auto",p1.checked);}
-  ["reject","range","break","hold"].forEach(k=>{
+  ["reject","range","break","hold","retest"].forEach(k=>{
     timingState[k]=isYes(d[k]);
     const b=document.querySelector(`.timing button[data-timing="${k}"]`);
     if(b){b.classList.toggle("on",timingState[k]);b.classList.toggle("auto",timingState[k]);}
