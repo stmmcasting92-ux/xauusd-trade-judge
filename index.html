@@ -101,8 +101,29 @@ if(Number.isFinite(priceNow)){
       d.near_ema200 === true ||
       String(d.near_ema200).toLowerCase() === "true";
 
-    const zoneEma = document.getElementById("zoneEma");
-    if(zoneEma) zoneEma.checked = near200;
+    // 水平線ゾーン × EMA20/75/200 重なり自動判定
+const zoneLow = Number(document.getElementById("zl")?.value);
+const zoneHigh = Number(document.getElementById("zh")?.value);
+
+const validZone =
+  Number.isFinite(zoneLow) &&
+  Number.isFinite(zoneHigh) &&
+  zoneLow > 0 &&
+  zoneHigh > 0;
+
+const low = validZone ? Math.min(zoneLow, zoneHigh) : NaN;
+const high = validZone ? Math.max(zoneLow, zoneHigh) : NaN;
+
+const emaInZone =
+  validZone &&
+  (
+    (Number.isFinite(ema20Now) && ema20Now >= low && ema20Now <= high) ||
+    (Number.isFinite(ema75Now) && ema75Now >= low && ema75Now <= high) ||
+    (Number.isFinite(ema200Now) && ema200Now >= low && ema200Now <= high)
+  );
+
+const zoneEma = document.getElementById("zoneEma");
+if(zoneEma) zoneEma.checked = emaInZone;
 
     document.querySelectorAll(".seg").forEach(paintSeg);
     calc();
