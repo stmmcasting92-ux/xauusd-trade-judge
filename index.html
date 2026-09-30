@@ -53,4 +53,49 @@ document.getElementById("save").onclick=()=>{localStorage.setItem("xau-v1",JSON.
 document.getElementById("reset").onclick=()=>{if(confirm("リセットしますか？")){localStorage.removeItem("xau-v1");location.reload()}};
 try{let d=JSON.parse(localStorage.getItem("xau-v1"));if(d){Object.assign(S,d.S||{});Object.assign(P,d.P||{});Object.entries(d.F||{}).forEach(([k,v])=>{let e=document.getElementById(k);if(e)e.type=="checkbox"?e.checked=v:e.value=v});document.querySelectorAll(".seg").forEach(paintSeg);Object.keys(P).forEach(paintP)}}catch(e){}
 document.querySelectorAll("input,select").forEach(e=>e.onchange=calc);calc();if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
+const WORKER_URL = "https://xauusd-judge-webhook.stmm-casting92.workers.dev";
+
+async function syncXAU(){
+  try{
+    const r = await fetch(WORKER_URL,{cache:"no-store"});
+    const x = await r.json();
+    const d = x.latest;
+    if(!d) return;
+
+    // 現在価格
+    const price = document.getElementById("price");
+    if(price && d.price) price.value = d.price;
+
+    // 上位足～下位足
+    const mapTF = {
+      h4: d["4h"],
+      h1: d["1h"],
+      m15: d["15m"],
+      m5: d["5m"]
+    };
+
+    Object.entries(mapTF).forEach(([k,v])=>{
+      if(!v) return;
+      const z = String(v).toUpperCase();
+      S[k] = z==="UP" ? "up" : z==="DOWN" ? "down" : "flat";
+    });
+
+    // EMA200付近
+    const near200 =
+      d.near_ema200 === true ||
+      String(d.near_ema200).toLowerCase() === "true";
+
+    const zoneEma = document.getElementById("zoneEma");
+    if(zoneEma) zoneEma.checked = near200;
+
+    document.querySelectorAll(".seg").forEach(paintSeg);
+    calc();
+
+  }catch(e){
+    console.log("XAU sync error",e);
+  }
+}
+
+syncXAU();
+setInterval(syncXAU,2500);
 </script></body></html>
