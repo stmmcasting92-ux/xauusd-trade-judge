@@ -31,8 +31,8 @@ h1{margin:0;font-size:25px} .sub{color:#9fb0c9;font-size:12px}
 .section-title{color:#9fb0c9;font-size:12px;margin-bottom:10px}
 .zone-state{font-size:18px;font-weight:850}.action{font-size:13px;line-height:1.55;margin-top:8px;color:#dbe5f5}
 .points{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.chk{background:#0b1424;border:1px solid #25344d;border-radius:10px;padding:10px 8px;font-size:12px}
-.chk input{width:17px;height:17px}.timing{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.timing button{border:1px solid #25344d;background:#0b1424;color:#dbe5f5;border-radius:10px;padding:11px 7px}
+.chk input{width:17px;height:17px}.chk.auto{border-color:#24c77a}.chk.auto span{color:#72e6ad;font-weight:800}.timing{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.timing button{border:1px solid #25344d;background:#0b1424;color:#dbe5f5;border-radius:10px;padding:11px 7px}.timing button.auto{border-color:#24c77a;color:#72e6ad;font-weight:800}
 .timing button.on{border-color:#f5b942;color:#f5b942;font-weight:800}.finalbox{text-align:center}.final-judge{font-size:32px;font-weight:900;margin:7px 0}
 </style>
 </head>
@@ -74,10 +74,10 @@ h1{margin:0;font-size:25px} .sub{color:#9fb0c9;font-size:12px}
   <div id="zoneAction" class="action">ゾーン判定待ち</div>
   <div class="row"><span class="label">受信時刻</span><b id="received">--</b></div>
 </div>
-<div class="card"><div class="section-title">POINT 1〜9（該当するものをタップ）</div><div class="points" id="points"><label class="chk"><input type="checkbox" data-point="1"> P1</label><label class="chk"><input type="checkbox" data-point="2"> P2</label><label class="chk"><input type="checkbox" data-point="3"> P3</label><label class="chk"><input type="checkbox" data-point="4"> P4</label><label class="chk"><input type="checkbox" data-point="5"> P5</label><label class="chk"><input type="checkbox" data-point="6"> P6</label><label class="chk"><input type="checkbox" data-point="7"> P7</label><label class="chk"><input type="checkbox" data-point="8"> P8</label><label class="chk"><input type="checkbox" data-point="9"> P9</label></div></div>
+<div class="card"><div class="section-title">POINT 1〜9（P1は自動判定／P2〜P9は手動）</div><div class="points" id="points"><label class="chk" id="p1box"><input type="checkbox" data-point="1" disabled> <span>P1</span></label><label class="chk"><input type="checkbox" data-point="2"> P2</label><label class="chk"><input type="checkbox" data-point="3"> P3</label><label class="chk"><input type="checkbox" data-point="4"> P4</label><label class="chk"><input type="checkbox" data-point="5"> P5</label><label class="chk"><input type="checkbox" data-point="6"> P6</label><label class="chk"><input type="checkbox" data-point="7"> P7</label><label class="chk"><input type="checkbox" data-point="8"> P8</label><label class="chk"><input type="checkbox" data-point="9"> P9</label></div></div>
 <div class="card"><div class="section-title">1分足タイミング</div><div class="timing">
-<button data-timing="reject">拒否反応</button><button data-timing="range">揉み合い</button>
-<button data-timing="break">終値ブレイク</button><button data-timing="hold">次足維持</button>
+<button data-timing="reject" disabled>拒否反応</button><button data-timing="range" disabled>揉み合い</button>
+<button data-timing="break" disabled>終値ブレイク</button><button data-timing="hold" disabled>次足維持</button>
 <button data-timing="retest">リテスト成功</button></div></div>
 <div class="card finalbox"><div class="section-title">FINAL JUDGE</div>
 <div id="finalJudge" class="final-judge wait">WAIT</div><div id="finalReason" class="reason">データ取得中...</div></div>
@@ -99,6 +99,17 @@ function fmt(v){
 
 const timingState={reject:false,range:false,break:false,hold:false,retest:false};
 function selectedPoints(){return [...document.querySelectorAll('#points input:checked')].length}
+function isYes(v){return String(v||"").toUpperCase()==="YES"}
+function syncAutoStates(d){
+  const p1=document.querySelector('#points input[data-point="1"]');
+  const p1box=$("p1box");
+  if(p1){p1.checked=isYes(d.p1);p1box.classList.toggle("auto",p1.checked);}
+  ["reject","range","break","hold"].forEach(k=>{
+    timingState[k]=isYes(d[k]);
+    const b=document.querySelector(`.timing button[data-timing="${k}"]`);
+    if(b){b.classList.toggle("on",timingState[k]);b.classList.toggle("auto",timingState[k]);}
+  });
+}
 function zoneInfo(d){
  const p=Number(d.price),hi=Number(d.zone_high_1h),lo=Number(d.zone_low_1h);
  if(!Number.isFinite(p)||!Number.isFinite(hi)||!Number.isFinite(lo)||hi<=lo)return {state:"--",action:"ゾーンデータ待ち"};
@@ -141,7 +152,7 @@ async function refresh(){
     $("ema20").textContent=fmt(d.ema20); $("ema75").textContent=fmt(d.ema75); $("ema200").textContent=fmt(d.ema200);
     $("near").textContent=val(d.near_ema200); dir("env",d.environment);
     $("zh").textContent=val(d.zone_high_1h); $("zl").textContent=val(d.zone_low_1h);
-    $("received").textContent=d.received_at?new Date(d.received_at).toLocaleTimeString("ja-JP"): "--"; renderFinal(d);
+    $("received").textContent=d.received_at?new Date(d.received_at).toLocaleTimeString("ja-JP"): "--"; syncAutoStates(d); renderFinal(d);
     $("updated").textContent="画面更新 "+new Date().toLocaleTimeString("ja-JP");
     $("live").textContent="LIVE"; $("dot").className="dot";
   } catch(e) {
@@ -150,7 +161,7 @@ async function refresh(){
   }
 }
 document.querySelectorAll('#points input').forEach(x=>x.addEventListener('change',()=>window.latestData&&renderFinal(window.latestData)));
-document.querySelectorAll('.timing button').forEach(b=>b.addEventListener('click',()=>{let k=b.dataset.timing;timingState[k]=!timingState[k];b.classList.toggle('on',timingState[k]);if(window.latestData)renderFinal(window.latestData)}));
+document.querySelectorAll('.timing button:not([disabled])').forEach(b=>b.addEventListener('click',()=>{let k=b.dataset.timing;timingState[k]=!timingState[k];b.classList.toggle('on',timingState[k]);if(window.latestData)renderFinal(window.latestData)}));
 refresh(); setInterval(refresh,10000);
 if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
 </script></body></html>
