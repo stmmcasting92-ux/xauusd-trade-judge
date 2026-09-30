@@ -80,7 +80,23 @@ async function syncXAU(){
       S[k] = z==="UP" ? "up" : z==="DOWN" ? "down" : "flat";
     });
 
-    // EMA200付近
+    // EMA20 / 75 / 200
+const priceNow = Number(d.price);
+const ema20Now = Number(d.ema20);
+const ema75Now = Number(d.ema75);
+const ema200Now = Number(d.ema200);
+
+if(Number.isFinite(priceNow)){
+  if(Number.isFinite(ema20Now))
+    S.e20 = priceNow > ema20Now ? "up" : priceNow < ema20Now ? "down" : "flat";
+
+  if(Number.isFinite(ema75Now))
+    S.e75 = priceNow > ema75Now ? "up" : priceNow < ema75Now ? "down" : "flat";
+
+  if(Number.isFinite(ema200Now))
+    S.e200 = priceNow > ema200Now ? "up" : priceNow < ema200Now ? "down" : "flat";
+}
+   // EMA200付近
     const near200 =
       d.near_ema200 === true ||
       String(d.near_ema200).toLowerCase() === "true";
