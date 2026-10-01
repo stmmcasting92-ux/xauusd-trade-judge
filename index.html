@@ -162,9 +162,9 @@ async function refresh(){
     const j=await r.json(), d=j.latest||j; window.latestData=d;
     $("price").textContent=fmt(d.price);
     const judge=String(d.judge||"WAIT").toUpperCase();
-    $("judge").textContent=judge;
-    $("judge").className="judge "+(judge==="LONG"?"long":judge==="SHORT"?"short":"wait");
-    $("reason").textContent=d.reason||"判定待ち";
+$("judge").textContent=judge;
+$("judge").className="judge "+(judge==="LONG BIAS"?"long":judge==="SHORT BIAS"?"short":"wait");
+$("reason").textContent=d.reason||"判定待ち";
     dir("h4",d["4h"]); dir("h1",d["1h"]); dir("m15",d["15m"]); dir("m5",d["5m"]);
     $("ema20").textContent=fmt(d.ema20); $("ema75").textContent=fmt(d.ema75); $("ema200").textContent=fmt(d.ema200);
     $("near").textContent=val(d.near_ema200); dir("env",d.environment);
