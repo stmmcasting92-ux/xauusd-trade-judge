@@ -74,11 +74,20 @@ h1{margin:0;font-size:25px} .sub{color:#9fb0c9;font-size:12px}
   <div id="zoneAction" class="action">ゾーン判定待ち</div>
   <div class="row"><span class="label">受信時刻</span><b id="received">--</b></div>
 </div>
-<div class="card"><div class="section-title">POINT 1〜9（P1は自動判定／P2〜P9は手動）</div><div class="points" id="points"><label class="chk" id="p1box"><input type="checkbox" data-point="1" disabled> <span>P1</span></label><label class="chk"><input type="checkbox" data-point="2"> P2</label><label class="chk"><input type="checkbox" data-point="3"> P3</label><label class="chk"><input type="checkbox" data-point="4"> P4</label><label class="chk"><input type="checkbox" data-point="5"> P5</label><label class="chk"><input type="checkbox" data-point="6"> P6</label><label class="chk"><input type="checkbox" data-point="7"> P7</label><label class="chk"><input type="checkbox" data-point="8"> P8</label><label class="chk"><input type="checkbox" data-point="9"> P9</label></div></div>
-<div class="card"><div class="section-title">1分足タイミング</div><div class="timing">
-<button data-timing="reject" disabled>拒否反応</button><button data-timing="range" disabled>揉み合い</button>
-<button data-timing="break" disabled>終値ブレイク</button><button data-timing="hold" disabled>次足維持</button>
-<button data-timing="retest" disabled>リテスト成功</button></div></div>
+<div class="card">
+<div class="section-title">POINT 1〜9（自動判定）</div>
+<div class="points" id="points">
+<div class="chk">P1 <span id="p1v">--</span></div><div class="chk">P2 <span id="p2v">--</span></div><div class="chk">P3 <span id="p3v">--</span></div>
+<div class="chk">P4 <span id="p4v">--</span></div><div class="chk">P5 <span id="p5v">--</span></div><div class="chk">P6 <span id="p6v">--</span></div>
+<div class="chk">P7 <span id="p7v">--</span></div><div class="chk">P8 <span id="p8v">--</span></div><div class="chk">P9 <span id="p9v">--</span></div>
+</div>
+<div class="row"><span class="label">LONG POINTS</span><b id="longPoints" class="long">0</b></div>
+<div class="row"><span class="label">SHORT POINTS</span><b id="shortPoints" class="short">0</b></div>
+</div>
+<div class="card"><div class="section-title">1分足タイミング（自動判定）</div><div class="timing">
+<button data-timing="reject" disabled>拒否反応 <b>--</b></button><button data-timing="range" disabled>揉み合い <b>--</b></button>
+<button data-timing="break" disabled>終値ブレイク <b>--</b></button><button data-timing="hold" disabled>次足維持 <b>--</b></button>
+<button data-timing="retest" disabled>リテスト成功 <b>--</b></button></div></div>
 <div class="card finalbox"><div class="section-title">FINAL JUDGE</div>
 <div id="finalJudge" class="final-judge wait">WAIT</div><div id="finalReason" class="reason">データ取得中...</div></div>
 
@@ -98,16 +107,22 @@ function fmt(v){
 }
 
 const timingState={reject:false,range:false,break:false,hold:false,retest:false};
-function selectedPoints(){return [...document.querySelectorAll('#points input:checked')].length}
 function isYes(v){return String(v||"").toUpperCase()==="YES"}
 function syncAutoStates(d){
-  const p1=document.querySelector('#points input[data-point="1"]');
-  const p1box=$("p1box");
-  if(p1){p1.checked=isYes(d.p1);p1box.classList.toggle("auto",p1.checked);}
+  let calcLong=0,calcShort=0;
+  for(let i=1;i<=9;i++){
+    const s=String(d["p"+i]||"NO").toUpperCase(),e=$("p"+i+"v");
+    if(s==="LONG"){calcLong++;e.textContent="LONG";e.className="long";}
+    else if(s==="SHORT"){calcShort++;e.textContent="SHORT";e.className="short";}
+    else{e.textContent="—";e.className="flat";}
+  }
+  const lp=Number(d.long_points),sp=Number(d.short_points);
+  $("longPoints").textContent=Number.isFinite(lp)?lp:calcLong;
+  $("shortPoints").textContent=Number.isFinite(sp)?sp:calcShort;
   ["reject","range","break","hold","retest"].forEach(k=>{
     timingState[k]=isYes(d[k]);
-    const b=document.querySelector(`.timing button[data-timing="${k}"]`);
-    if(b){b.classList.toggle("on",timingState[k]);b.classList.toggle("auto",timingState[k]);}
+    const el=document.querySelector(`.timing button[data-timing="${k}"]`);
+    if(el){el.classList.toggle("auto",timingState[k]);const v=el.querySelector("b");if(v)v.textContent=timingState[k]?"YES":"NO";}
   });
 }
 function zoneInfo(d){
@@ -122,7 +137,9 @@ function zoneInfo(d){
 function renderFinal(d){
  const z=zoneInfo(d),dirs=[d["4h"],d["1h"],d["15m"],d["5m"]].map(v=>String(v||"").toUpperCase());
  const down=dirs.every(v=>v==="DOWN"),up=dirs.every(v=>v==="UP"),p=Number(d.price),hi=Number(d.zone_high_1h),lo=Number(d.zone_low_1h);
- const confirm=timingState.break&&timingState.hold&&timingState.retest,n=selectedPoints();
+ const confirm=timingState.break&&timingState.hold&&timingState.retest;
+ const lp=Number(d.long_points),sp=Number(d.short_points);
+ const n=(Number.isFinite(lp)?lp:0)+(Number.isFinite(sp)?sp:0);
  $("zoneState").textContent=z.state;$("zoneAction").textContent=z.action;
  let j="WAIT",r="条件未完成。1分足の確定を待つ。";
  if(down){
@@ -160,8 +177,7 @@ async function refresh(){
     $("updated").textContent=String(e);
   }
 }
-document.querySelectorAll('#points input').forEach(x=>x.addEventListener('change',()=>window.latestData&&renderFinal(window.latestData)));
-document.querySelectorAll('.timing button:not([disabled])').forEach(b=>b.addEventListener('click',()=>{let k=b.dataset.timing;timingState[k]=!timingState[k];b.classList.toggle('on',timingState[k]);if(window.latestData)renderFinal(window.latestData)}));
+
 refresh(); setInterval(refresh,10000);
 if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
 </script></body></html>
