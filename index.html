@@ -268,6 +268,8 @@ h1{margin:0;font-size:25px} .sub{color:#9fb0c9;font-size:12px}
     bar.innerHTML = b == null ? '<div class="box warn">データ待ち</div>' :
       `<div class="row" style="border:0"><b style="color:#4ade98">ブル ${b}%</b><b style="color:#ff7b8f">ベア ${100 - b}%</b></div>
        <div class="bar"><i style="width:${b}%;background:#1f8f5f"></i><i style="width:${100 - b}%;background:#d64a62"></i></div>`;
+    const age = last.receivedAt ? (Date.now() - new Date(last.receivedAt).getTime()) / 60000 : null;
+    if (age != null && age > 3) bar.innerHTML = '<div class="box bad">データが' + Math.floor(age) + '分前のままです。TradingViewのアラートが止まっている可能性があります。この間の表示は信頼しないでください。</div>' + bar.innerHTML;
     if (!S.pos) { dyn.innerHTML = ''; return; }
     const p = S.pos, j = judge();
     const T = { keep: ['ok', '維持', j.r >= 1 ? '根拠は生きています。+1R超えなので損切りを建値に上げられます。' : '根拠は生きています。ルール通り保持。'],
@@ -319,7 +321,10 @@ function syncAutoStates(d){
   ["reject","range","break","hold","retest"].forEach(k=>{
     timingState[k]=isYes(d[k]);
     const el=document.querySelector(`.timing button[data-timing="${k}"]`);
-    if(el){el.classList.toggle("auto",timingState[k]);const v=el.querySelector("b");if(v)v.textContent=timingState[k]?"YES":"NO";}
+    if(el){el.classList.toggle("auto",timingState[k]);const v=el.querySelector("b");
+      if(v){const dd=String(d[k+"_dir"]||"").toUpperCase(),on=timingState[k];
+        v.textContent=on?("YES"+(dd==="BULL"?" BULL":dd==="BEAR"?" BEAR":"")):"NO";
+        v.className=on&&dd==="BULL"?"long":on&&dd==="BEAR"?"short":"";}}
   });
 }
 function zoneInfo(d){
@@ -366,6 +371,7 @@ function feedHold(d){
   }
   HoldJudge.update({
     price:Number(d.price),
+    receivedAt:d.received_at,
     longPts:Number(d.long_points)||0,
     shortPts:Number(d.short_points)||0,
     dir:{"4H":d["4h"],"1H":d["1h"],"15M":d["15m"],"5M":d["5m"]},
@@ -390,7 +396,9 @@ $("reason").textContent=d.reason||"判定待ち";
     $("zh").textContent=val(d.zone_high_1h); $("zl").textContent=val(d.zone_low_1h);
     $("received").textContent=d.received_at?new Date(d.received_at).toLocaleTimeString("ja-JP"): "--"; syncAutoStates(d); renderFinal(d); feedHold(d);
     $("updated").textContent="画面更新 "+new Date().toLocaleTimeString("ja-JP");
-    $("live").textContent="LIVE"; $("dot").className="dot";
+    const age=d.received_at?(Date.now()-new Date(d.received_at).getTime())/60000:null;
+    if(age!==null&&age>3){$("live").textContent="データ停止中（"+Math.floor(age)+"分前）";$("dot").className="dot err";}
+    else{$("live").textContent="LIVE";$("dot").className="dot";}
   } catch(e) {
     $("live").textContent="CONNECTION ERROR"; $("dot").className="dot err";
     $("updated").textContent=String(e);
