@@ -91,8 +91,205 @@ h1{margin:0;font-size:25px} .sub{color:#9fb0c9;font-size:12px}
 <div class="card finalbox"><div class="section-title">FINAL JUDGE</div>
 <div id="finalJudge" class="final-judge wait">WAIT</div><div id="finalReason" class="reason">データ取得中...</div></div>
 
+<!-- ★追加：根拠チェック（HoldJudge）の表示場所 -->
+<div id="hj-slot"></div>
+
 <div class="small">10秒ごとに自動更新</div>
 </main>
+<!-- ★追加：HoldJudge本体（同じフォルダに hold-judge.js を置く） -->
+<script>
+/* hold-judge.js ― 入った根拠が今も生きているかを追うパネル
+ *
+ * 使い方:
+ *   HoldJudge.mount(document.querySelector('main'));
+ *   HoldJudge.update({
+ *     price: 4147.02,
+ *     longPts: 1, shortPts: 1,                       // LONG/SHORT POINTS
+ *     dir: { '4H':'DOWN','1H':'DOWN','15M':'DOWN','5M':'DOWN' },   // MULTI TIMEFRAME
+ *     ema: { '5M': {20:4141.8, 75:4138.3, 200:4139.8, 700:4150.2}, // 取得できた分だけでOK
+ *            '1M': {...}, '15M': {...}, '1H': {...}, '4H': {...} }
+ *   });
+ * 足りない項目は自動で無視して、残りで計算します。
+ */
+(function () {
+  const KEY = 'holdJudge.v1';
+  const TF_W = { '4H': 3, '1H': 2, '15M': 1.5, '5M': 1, '1M': 1 };
+  const COMP_W = { ema: 0.5, dir: 0.3, pts: 0.2, timing: 0.25 }; // EMA位置 / 時間足方向 / ポイント差 / 1分足タイミング(方向付き)
+  const DEF = { pos: null, timeMin: 15, drop: 15, ptsGap: 2, history: [], adds: {} };
+  let S = Object.assign({}, DEF, load());
+  let last = { price: null };
+  let dyn, form;
+
+  function load() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } }
+  function save() { localStorage.setItem(KEY, JSON.stringify(S)); }
+  const f = (n, d = 2) => (n == null || isNaN(n)) ? '—' : Number(n).toFixed(d);
+  const today = () => new Date().toLocaleDateString('sv-SE');
+
+  // ---- ブル/ベア% ----
+  function score(d) {
+    const parts = [];
+    if (d.ema && d.price != null) {
+      let b = 0, t = 0;
+      for (const tf in d.ema) for (const p in d.ema[tf]) {
+        const v = d.ema[tf][p]; if (v == null || isNaN(v)) continue;
+        const w = TF_W[tf] || 1; t += w; if (d.price > v) b += w;
+      }
+      if (t) parts.push({ w: COMP_W.ema, r: b / t });
+    }
+    if (d.dir) {
+      let b = 0, t = 0;
+      for (const tf in d.dir) {
+        const w = TF_W[tf] || 1, v = String(d.dir[tf]).toUpperCase();
+        if (v === 'UP') { b += w; t += w; } else if (v === 'DOWN') { t += w; }
+      }
+      if (t) parts.push({ w: COMP_W.dir, r: b / t });
+    }
+    const L = +d.longPts || 0, Sh = +d.shortPts || 0;
+    if (L + Sh > 0) parts.push({ w: COMP_W.pts, r: L / (L + Sh) });
+    if (d.timing) {                                   // 拒否反応・ブレイク・維持・リテストの方向（出ている分だけ）
+      let b = 0, t = 0;
+      for (const k in d.timing) {
+        const v = String(d.timing[k]).toUpperCase();
+        if (v === 'BULL') { b++; t++; } else if (v === 'BEAR') { t++; }
+      }
+      if (t) parts.push({ w: COMP_W.timing, r: b / t });
+    }
+    if (!parts.length) return null;
+    const W = parts.reduce((s, p) => s + p.w, 0);
+    return Math.round(parts.reduce((s, p) => s + p.w * p.r, 0) / W * 100);
+  }
+  const snap = d => ({ bull: score(d), longPts: +d.longPts || 0, shortPts: +d.shortPts || 0, dir: Object.assign({}, d.dir || {}) });
+
+  // ---- 判定 ----
+  function judge() {
+    const p = S.pos, d = p.side === 'LONG' ? 1 : -1, px = last.price;
+    const bull = score(last), my = bull == null ? null : (d === 1 ? bull : 100 - bull);
+    const my0 = p.snap.bull == null ? null : (d === 1 ? p.snap.bull : 100 - p.snap.bull);
+    const slDist = Math.abs(p.entry - p.sl0), r = slDist ? (px - p.entry) * d / slDist : 0;
+    const hitSL = (px - p.sl) * d <= 0;
+    const against = d === 1 ? 'DOWN' : 'UP';
+    const why = [];
+    if (my != null && my0 != null && my0 - my >= S.drop) why.push(`自分側が建値時より${my0 - my}→${my}%に悪化`);
+    for (const tf of ['5M', '15M']) {
+      const now = last.dir && String(last.dir[tf]).toUpperCase(), was = String(p.snap.dir[tf]).toUpperCase();
+      if (now === against && was !== against) why.push(`${tf}の方向が逆に転換`);
+    }
+    const gapNow = d === 1 ? (+last.shortPts || 0) - (+last.longPts || 0) : (+last.longPts || 0) - (+last.shortPts || 0);
+    const gapWas = d === 1 ? p.snap.shortPts - p.snap.longPts : p.snap.longPts - p.snap.shortPts;
+    if (gapNow - gapWas >= S.ptsGap) why.push('逆方向のポイントが増加');
+    const mins = (Date.now() - p.t) / 60000;
+    if (mins >= S.timeMin && r < 0.3) why.push(`${Math.floor(mins)}分たっても伸びない`);
+    let st = why.length >= 2 ? 'collapse' : why.length === 1 ? 'weak' : 'keep';
+    if (hitSL) { st = 'collapse'; why.unshift('損切りライン到達'); }
+    return { bull, my, my0, r, why, st, hitSL, counter: my0 != null && my0 < 40 };
+  }
+
+  // ---- UI ----
+  const CSS = `
+  .hj{background:#111c2e;border:1px solid #1f2d47;border-radius:28px;padding:22px;margin:16px 0;color:#e8edf7}
+  .hj h3{margin:0 0 14px;font-size:15px;font-weight:600;color:#9fb0cc}
+  .hj .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .hj label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#8ea0bf}
+  .hj input,.hj select{background:#0a1220;border:1px solid #243553;border-radius:12px;color:#fff;padding:10px;font-size:16px;width:100%;box-sizing:border-box}
+  .hj .row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #1f2d47;font-size:15px}
+  .hj .box{border-radius:16px;padding:14px;margin-top:12px;font-size:15px;line-height:1.6}
+  .hj .ok{background:#0f2a20;border:1px solid #1f8f5f}
+  .hj .warn{background:#2c2410;border:1px solid #c99a2e}
+  .hj .bad{background:#2c1219;border:1px solid #d64a62}
+  .hj .big{font-size:28px;font-weight:700}
+  .hj .bar{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:10px 0}
+  .hj .bar i{display:block}
+  .hj .btns{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .hj button{flex:1;min-width:120px;border:1px solid #243553;background:#0a1220;color:#fff;border-radius:14px;padding:13px;font-size:15px;font-weight:600}
+  .hj ul{margin:6px 0 0;padding-left:20px}
+  `;
+  function mount(el) {
+    const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
+    const root = document.createElement('section'); root.className = 'hj';
+    root.innerHTML = `<h3>根拠チェック（ブル / ベア・維持 / 弱化 / 崩壊）</h3>
+      <div id="hj-bar"></div>
+      <div id="hj-form">
+        <div class="grid">
+          <label>方向<select id="hj-side"><option>LONG</option><option>SHORT</option></select></label>
+          <label>建値<input id="hj-entry" type="number" inputmode="decimal" step="0.01"></label>
+          <label>ロット<input id="hj-lot" type="number" inputmode="decimal" step="0.01"></label>
+          <label>損切り価格（必須）<input id="hj-sl" type="number" inputmode="decimal" step="0.01"></label>
+        </div>
+        <div class="btns"><button id="hj-now">建値に現在値を入れる</button><button id="hj-rec">ポジションを記録</button></div>
+        <p style="font-size:12px;color:#8ea0bf;margin:8px 0 0">記録した時点のブル/ベアと判定内容を保存し、以降はそれとの比較で判定します。</p>
+      </div>
+      <div id="hj-dyn"></div>`;
+    el.appendChild(root);
+    dyn = root.querySelector('#hj-dyn'); form = root.querySelector('#hj-form');
+    root.querySelector('#hj-now').onclick = () => { if (last.price != null) root.querySelector('#hj-entry').value = last.price; };
+    root.querySelector('#hj-rec').onclick = () => {
+      const v = id => parseFloat(root.querySelector(id).value);
+      const side = root.querySelector('#hj-side').value, entry = v('#hj-entry'), lot = v('#hj-lot'), sl = v('#hj-sl');
+      if (!entry || !sl) return alert('建値と損切り価格を入力してください。損切りなしでは記録できません。');
+      if ((side === 'LONG' && sl >= entry) || (side === 'SHORT' && sl <= entry)) return alert('損切りは建値の不利な側に置いてください。');
+      S.pos = { side, entry, lot: lot || 0, sl, sl0: sl, t: Date.now(), snap: snap(last) };
+      save(); render();
+    };
+    dyn.addEventListener('click', onClick);
+    render();
+  }
+  function update(d) { last = Object.assign(last, d); if (dyn) render(); }
+
+  function onClick(e) {
+    const a = e.target.dataset.act; if (!a || !S.pos) return;
+    const p = S.pos, d = p.side === 'LONG' ? 1 : -1;
+    if (a === 'be') { if ((p.entry - p.sl) * d > 0) p.sl = p.entry; }
+    if (a === 'sl') {
+      const v = parseFloat(prompt('新しい損切り価格（有利な方向にだけ動かせます）', p.sl));
+      if (!v) return;
+      if ((v - p.sl) * d < 0) return alert('損切りを不利な方向には動かせません。');
+      p.sl = v;
+    }
+    if (a === 'close') {
+      const r = Math.abs(p.entry - p.sl0) ? (last.price - p.entry) * d / Math.abs(p.entry - p.sl0) : 0;
+      S.history.unshift({ day: today(), side: p.side, r: Math.round(r * 100) / 100 });
+      S.history = S.history.slice(0, 100); S.pos = null;
+    }
+    if (a === 'add') {
+      S.adds[today()] = (S.adds[today()] || 0) + 1;
+      const j = judge();
+      alert(j.st === 'keep' && j.r > 0
+        ? '追加はルール外です。決めたロットだけで完結させてください。'
+        : 'それはナンピンです。根拠が弱っている/含み損の状態での追加は禁止です。損切りに任せてください。');
+    }
+    save(); render();
+  }
+
+  function render() {
+    if (!dyn) return;
+    form.style.display = S.pos ? 'none' : 'block';
+    const bar = document.getElementById('hj-bar');
+    const b = score(last);
+    bar.innerHTML = b == null ? '<div class="box warn">データ待ち</div>' :
+      `<div class="row" style="border:0"><b style="color:#4ade98">ブル ${b}%</b><b style="color:#ff7b8f">ベア ${100 - b}%</b></div>
+       <div class="bar"><i style="width:${b}%;background:#1f8f5f"></i><i style="width:${100 - b}%;background:#d64a62"></i></div>`;
+    if (!S.pos) { dyn.innerHTML = ''; return; }
+    const p = S.pos, j = judge();
+    const T = { keep: ['ok', '維持', j.r >= 1 ? '根拠は生きています。+1R超えなので損切りを建値に上げられます。' : '根拠は生きています。ルール通り保持。'],
+                weak: ['warn', '弱化', j.r > 0 ? '根拠が弱っています。利益があるうちに利確を検討。' : '根拠が弱っています。建値付近で逃げるか、ロットを減らす。'],
+                collapse: ['bad', '崩壊', j.hitSL ? '損切りライン到達。今すぐ決済。' : '根拠が崩れました。損切りに届く前に撤退。'] }[j.st];
+    dyn.innerHTML = `<div class="box ${T[0]}"><span class="big">${T[1]}</span>　${p.side}　${j.r >= 0 ? '+' : ''}${f(j.r)}R<br>${T[2]}
+        ${j.why.length ? '<ul>' + j.why.map(x => `<li>${x}</li>`).join('') + '</ul>' : ''}</div>
+      ${j.counter ? '<div class="box warn">この入りは建値時点で自分側が40%未満の「逆張り」です。</div>' : ''}
+      <div class="row"><span>建値 / 現在値</span><b>${f(p.entry)} / ${f(last.price)}</b></div>
+      <div class="row"><span>自分側（建値時 → 今）</span><b>${j.my0 == null ? '—' : j.my0 + '%'} → ${j.my == null ? '—' : j.my + '%'}</b></div>
+      <div class="row"><span>損切り${p.sl !== p.sl0 ? '（移動済）' : ''}</span><b>${f(p.sl)}</b></div>
+      <div class="row"><span>本日のナンピン衝動</span><b>${S.adds[today()] || 0}回</b></div>
+      <div class="btns"><button data-act="close">決済を記録</button>
+        <button data-act="be">損切りを建値へ</button>
+        <button data-act="sl">損切りを有利側へ</button>
+        <button data-act="add">追加したい…</button></div>`;
+  }
+
+  window.HoldJudge = { mount, update };
+})();
+
+</script>
 <script>
 const API="https://xauusd-judge-webhook.stmm-casting92.workers.dev/";
 const $=id=>document.getElementById(id);
@@ -155,6 +352,28 @@ function renderFinal(d){
  $("finalJudge").textContent=j;$("finalJudge").className="final-judge "+(j==="LONG"?"long":j==="SHORT"?"short":"wait");$("finalReason").textContent=r;
 }
 
+// ★追加：HoldJudge にデータを渡す
+function feedHold(d){
+  if(!window.HoldJudge) return;
+  const TF={"1M":"1m","5M":"5m","15M":"15m","1H":"1h","4H":"4h"},ema={};
+  for(const [T,k] of Object.entries(TF)){
+    ema[T]={};
+    for(const p of [20,75,200,700]){
+      let v=parseFloat(d["ema_"+k+"_"+p]);
+      if(isNaN(v)&&T==="1M"&&p!==700) v=parseFloat(d["ema"+p]); // 旧データ互換
+      if(!isNaN(v)) ema[T][p]=v;
+    }
+  }
+  HoldJudge.update({
+    price:Number(d.price),
+    longPts:Number(d.long_points)||0,
+    shortPts:Number(d.short_points)||0,
+    dir:{"4H":d["4h"],"1H":d["1h"],"15M":d["15m"],"5M":d["5m"]},
+    timing:{reject:d.reject_dir,break:d.break_dir,hold:d.hold_dir,retest:d.retest_dir},
+    ema
+  });
+}
+
 async function refresh(){
   try {
     const r=await fetch(API+"?t="+Date.now(),{cache:"no-store"});
@@ -169,7 +388,7 @@ $("reason").textContent=d.reason||"判定待ち";
     $("ema20").textContent=fmt(d.ema20); $("ema75").textContent=fmt(d.ema75); $("ema200").textContent=fmt(d.ema200);
     $("near").textContent=val(d.near_ema200); dir("env",d.environment);
     $("zh").textContent=val(d.zone_high_1h); $("zl").textContent=val(d.zone_low_1h);
-    $("received").textContent=d.received_at?new Date(d.received_at).toLocaleTimeString("ja-JP"): "--"; syncAutoStates(d); renderFinal(d);
+    $("received").textContent=d.received_at?new Date(d.received_at).toLocaleTimeString("ja-JP"): "--"; syncAutoStates(d); renderFinal(d); feedHold(d);
     $("updated").textContent="画面更新 "+new Date().toLocaleTimeString("ja-JP");
     $("live").textContent="LIVE"; $("dot").className="dot";
   } catch(e) {
@@ -178,6 +397,8 @@ $("reason").textContent=d.reason||"判定待ち";
   }
 }
 
+// ★追加：HoldJudge を表示場所に配置
+if(window.HoldJudge) HoldJudge.mount($("hj-slot"));
 refresh(); setInterval(refresh,10000);
 if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
 </script></body></html>
