@@ -34,6 +34,18 @@ h1{margin:0;font-size:25px} .sub{color:#9fb0c9;font-size:12px}
 .chk input{width:17px;height:17px}.chk.auto{border-color:#24c77a}.chk.auto span{color:#72e6ad;font-weight:800}.timing{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .timing button{border:1px solid #25344d;background:#0b1424;color:#dbe5f5;border-radius:10px;padding:11px 7px}.timing button.auto{border-color:#24c77a;color:#72e6ad;font-weight:800}
 .timing button.on{border-color:#f5b942;color:#f5b942;font-weight:800}.finalbox{text-align:center}.final-judge{font-size:32px;font-weight:900;margin:7px 0}
+
+/* v1.6 初動方向性分析：既存パネルと独立 */
+.im-header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+.im-tag{font-size:12px;font-weight:800;padding:6px 10px;border-radius:999px;background:#233047;color:#c4cedd;text-align:center}
+.im-tag.up{background:#123c30;color:#72e6ad}.im-tag.down{background:#46232f;color:#ff7d8b}
+.im-tag.warn{background:#453619;color:#f5b942}
+.im-cell{background:#0b1424;border:1px solid #25344d;border-radius:12px;padding:12px;min-width:0}
+.im-cell .label{font-size:12px;display:block;margin-bottom:6px}.im-value{font-size:20px;font-weight:850;overflow-wrap:anywhere}
+.im-track{height:12px;background:#26334b;border-radius:99px;overflow:hidden;margin:12px 0 5px}
+.im-track>div{height:100%;width:0;background:#9fb0c9;transition:width .2s}
+.im-note{font-size:13px;line-height:1.6;color:#dbe5f5;margin-top:10px}
+.im-foot{font-size:11px;color:#9fb0c9;margin-top:10px}
 </style>
 </head>
 <body><main>
@@ -90,6 +102,20 @@ h1{margin:0;font-size:25px} .sub{color:#9fb0c9;font-size:12px}
 <button data-timing="retest" disabled>リテスト成功 <b>--</b></button></div></div>
 <div class="card finalbox"><div class="section-title">FINAL JUDGE</div>
 <div id="finalJudge" class="final-judge wait">WAIT</div><div id="finalReason" class="reason">データ取得中...</div></div>
+
+<!-- v1.6: 1〜5分の初動方向性分析（FINAL JUDGEとは別判定） -->
+<div class="card" id="initial-panel">
+  <div class="im-header"><div class="section-title" style="margin:0">INITIAL MOVE / 1〜5分先</div><span id="imState" class="im-tag">データ待ち</span></div>
+  <div class="grid">
+    <div class="im-cell"><span class="label">初動方向</span><div id="imDirection" class="im-value flat">--</div></div>
+    <div class="im-cell"><span class="label">継続スコア</span><div id="imScore" class="im-value">-- / 100</div></div>
+    <div class="im-cell"><span class="label">経過本数（1分足）</span><div id="imAge" class="im-value">-- / 5</div></div>
+    <div class="im-cell"><span class="label">検知レンジ</span><div id="imRange" class="im-value" style="font-size:15px">--</div></div>
+  </div>
+  <div class="im-track"><div id="imBar"></div></div>
+  <div id="imNote" class="im-note">初動データを取得中です。</div>
+  <div id="imFresh" class="im-foot">スコアは条件一致度であり、上昇・下落確率ではありません。</div>
+</div>
 
 <!-- ★追加：根拠チェック（HoldJudge）の表示場所 -->
 <div id="hj-slot"></div>
@@ -380,6 +406,52 @@ function feedHold(d){
   });
 }
 
+// v1.6 初動分析：Workerから受信した値をそのまま独立表示
+function renderInitial(d){
+  const state=String(d.initial_state||"NONE").trim().toUpperCase();
+  const direction=String(d.initial_direction||"NONE").trim().toUpperCase();
+  const rawScore=d.initial_score;
+  const score=rawScore!==""&&rawScore!=null&&Number.isFinite(Number(rawScore))?Math.max(0,Math.min(100,Number(rawScore))):null;
+  const rawAge=d.initial_age;
+  const age=rawAge!==""&&rawAge!=null&&Number.isFinite(Number(rawAge))?Math.max(0,Number(rawAge)):null;
+  const hi=d.range_high!==""&&d.range_high!=null?Number(d.range_high):NaN;
+  const lo=d.range_low!==""&&d.range_low!=null?Number(d.range_low):NaN;
+  const received=d.received_at?Date.parse(d.received_at):NaN;
+  const stale=!Number.isFinite(received)||Date.now()-received>180000||received-Date.now()>60000;
+  const stateMap={
+    "NONE":"待機中","PRE-WATCH":"揉み合い警戒",
+    "INITIAL UP":"上方向の初動","INITIAL DOWN":"下方向の初動",
+    "CONTINUE UP":"上昇継続を支持","CONTINUE DOWN":"下落継続を支持",
+    "WATCH UP":"上方向を監視","WATCH DOWN":"下方向を監視",
+    "FADE":"初動失速警戒","REVERSE":"逆方向突破警戒"
+  };
+  const up=direction==="UP",down=direction==="DOWN";
+  const tag=$("imState");
+  tag.textContent=stale?"データ停止":(stateMap[state]||state);
+  tag.className="im-tag "+(stale||state==="FADE"||state==="REVERSE"||state==="PRE-WATCH"?"warn":up?"up":down?"down":"");
+  $("imDirection").textContent=up?"UP ↑":down?"DOWN ↓":"NONE";
+  $("imDirection").className="im-value "+(up?"up":down?"down":"flat");
+  $("imScore").textContent=score===null?"-- / 100":score.toFixed(0)+" / 100";
+  $("imAge").textContent=age===null?"-- / 5":age.toFixed(0)+" / 5";
+  $("imRange").textContent=Number.isFinite(hi)&&Number.isFinite(lo)&&hi>lo?lo.toFixed(2)+" 〜 "+hi.toFixed(2):"未検知";
+  const bar=$("imBar");bar.style.width=(score??0)+"%";
+  bar.style.background=up?"#24c77a":down?"#ff7d8b":"#9fb0c9";
+  let note="初動を監視中。条件が成立すると方向とスコアを表示します。";
+  if(state==="PRE-WATCH")note="値幅収縮を検知。上抜け・下抜けの方向はまだ確定していません。";
+  if(state.startsWith("INITIAL"))note="レンジ突破の初動を検知。次の1〜5本で維持・失速を追跡します。";
+  if(state.startsWith("CONTINUE"))note="初動方向への継続を支持する条件が成立。ただし短期的な反転に注意。";
+  if(state.startsWith("WATCH"))note="初動方向を監視中。継続を支持する条件はまだ十分ではありません。";
+  if(state==="FADE")note="突破水準へ戻ったため初動失速を警戒。";
+  if(state==="REVERSE")note="レンジ反対側への突破を検知。初動方向の見直しが必要です。";
+  const higher=[d["4h"],d["1h"]].map(v=>String(v||"").toUpperCase());
+  if((up&&higher.every(v=>v==="DOWN"))||(down&&higher.every(v=>v==="UP"))){
+    note+=" 4H・1Hとは逆方向の初動です。";
+  }
+  if(stale)note="受信データが3分以上更新されていないため、現在の判定として使用しないでください。";
+  $("imNote").textContent=note;
+  $("imFresh").textContent=(stale?"⚠ データ更新停止 ｜ ":"")+"スコアは条件一致度であり、勝率・方向確率ではありません。";
+}
+
 async function refresh(){
   try {
     const r=await fetch(API+"?t="+Date.now(),{cache:"no-store"});
@@ -394,7 +466,7 @@ $("reason").textContent=d.reason||"判定待ち";
     $("ema20").textContent=fmt(d.ema20); $("ema75").textContent=fmt(d.ema75); $("ema200").textContent=fmt(d.ema200);
     $("near").textContent=val(d.near_ema200); dir("env",d.environment);
     $("zh").textContent=val(d.zone_high_1h); $("zl").textContent=val(d.zone_low_1h);
-    $("received").textContent=d.received_at?new Date(d.received_at).toLocaleTimeString("ja-JP"): "--"; syncAutoStates(d); renderFinal(d); feedHold(d);
+    $("received").textContent=d.received_at?new Date(d.received_at).toLocaleTimeString("ja-JP"): "--"; syncAutoStates(d); renderFinal(d); feedHold(d); renderInitial(d);
     $("updated").textContent="画面更新 "+new Date().toLocaleTimeString("ja-JP");
     const age=d.received_at?(Date.now()-new Date(d.received_at).getTime())/60000:null;
     if(age!==null&&age>3){$("live").textContent="データ停止中（"+Math.floor(age)+"分前）";$("dot").className="dot err";}
@@ -402,6 +474,8 @@ $("reason").textContent=d.reason||"判定待ち";
   } catch(e) {
     $("live").textContent="CONNECTION ERROR"; $("dot").className="dot err";
     $("updated").textContent=String(e);
+    $("imState").textContent="接続エラー"; $("imState").className="im-tag warn";
+    $("imNote").textContent="Workerに接続できません。初動判定は更新されていません。";
   }
 }
 
