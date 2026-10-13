@@ -46,6 +46,15 @@ h1{margin:0;font-size:25px} .sub{color:#9fb0c9;font-size:12px}
 .im-track>div{height:100%;width:0;background:#9fb0c9;transition:width .2s}
 .im-note{font-size:13px;line-height:1.6;color:#dbe5f5;margin-top:10px}
 .im-foot{font-size:11px;color:#9fb0c9;margin-top:10px}
+
+/* FRB NEWS: existing judge logic remains independent */
+.news-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.news-pill{font-size:11px;padding:5px 9px;border-radius:999px;background:#26344c;color:#c4cedd}
+.news-pill.high{background:#512331;color:#ff9aab}.news-pill.elevated{background:#453619;color:#f5b942}
+.news-list{margin-top:12px}.news-item{padding:12px 0;border-top:1px solid #25344d}
+.news-item a{color:#dbe5f5;text-decoration:none;font-size:14px;line-height:1.55;overflow-wrap:anywhere}
+.news-meta{font-size:11px;color:#9fb0c9;margin-top:7px;display:flex;gap:8px;flex-wrap:wrap}
+.news-msg{color:#9fb0c9;font-size:12px;line-height:1.6;margin-top:10px}
 </style>
 </head>
 <body><main>
@@ -120,7 +129,16 @@ h1{margin:0;font-size:25px} .sub{color:#9fb0c9;font-size:12px}
 <!-- ★追加：根拠チェック（HoldJudge）の表示場所 -->
 <div id="hj-slot"></div>
 
-<div class="small">10秒ごとに自動更新</div>
+
+<!-- FRB official news: independent panel; does not affect FINAL JUDGE -->
+<div class="card" id="news-panel">
+  <div class="news-head"><div class="section-title" style="margin:0">XAUUSD NEWS / FRB公式情報</div><span id="newsStatus" class="news-pill">取得中</span></div>
+  <div class="row"><span class="label">重要度（取得記事内の最高値）</span><b id="newsRisk">--</b></div>
+  <div class="row"><span class="label">最終収集</span><b id="newsUpdated">--</b></div>
+  <div id="newsList" class="news-list"><div class="news-msg">ニュースを取得しています...</div></div>
+  <div class="news-msg">公式FRBの見出しを自動取得。重要度は見出しの分類であり、現在の売買方向や値動きの予測ではありません。記事の公開日時を確認してください。</div>
+</div>
+<div class="small">相場データは10秒ごと、ニュースは5分ごとに確認</div>
 </main>
 <!-- ★追加：HoldJudge本体（同じフォルダに hold-judge.js を置く） -->
 <script>
@@ -483,4 +501,52 @@ $("reason").textContent=d.reason||"判定待ち";
 if(window.HoldJudge) HoldJudge.mount($("hj-slot"));
 refresh(); setInterval(refresh,10000);
 if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
-</script></body></html>
+</script>
+<script>
+/* FRB official RSS news; independent of the trading signal logic. */
+(function(){
+  const NEWS_API="https://xauusd-news.stmm-casting92.workers.dev/";
+  const byId=id=>document.getElementById(id);
+  const level={HIGH:3,ELEVATED:2,NORMAL:1};
+  function dateLabel(v){
+    if(!v)return "日時不明";
+    const d=new Date(v);
+    return Number.isNaN(d.getTime())?"日時不明":d.toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"});
+  }
+  function status(label,kind){const el=byId("newsStatus");el.textContent=label;el.className="news-pill "+(kind||"");}
+  function render(data){
+    const items=Array.isArray(data.items)?data.items:[];
+    byId("newsUpdated").textContent=dateLabel(data.updated_at);
+    const top=items.reduce((v,x)=>level[String(x.risk||"").toUpperCase()]>level[v]?String(x.risk).toUpperCase():v,"NORMAL");
+    byId("newsRisk").textContent=items.length?top:"--";
+    status(data.ok===false?"取得不完全":data.partial?"一部取得":"取得成功",data.ok===false?"high":data.partial?"elevated":"");
+    const list=byId("newsList");list.replaceChildren();
+    if(!items.length){const e=document.createElement("div");e.className="news-msg";e.textContent="表示できる記事がありません。";list.append(e);return;}
+    for(const item of items.slice(0,6)){
+      const box=document.createElement("div");box.className="news-item";
+      const a=document.createElement("a");a.textContent=String(item.title||"無題");
+      const link=String(item.link||"");
+      if(/^https:\/\//i.test(link)){a.href=link;a.target="_blank";a.rel="noopener noreferrer";}
+      const meta=document.createElement("div");meta.className="news-meta";
+      for(const part of [String(item.risk||"NORMAL"),String(item.category||item.topic||"FRB"),dateLabel(item.published)]){
+        const span=document.createElement("span");span.textContent=part;meta.append(span);
+      }
+      box.append(a,meta);list.append(box);
+    }
+  }
+  async function refreshNews(){
+    try{
+      const response=await fetch(NEWS_API+"?t="+Date.now(),{cache:"no-store"});
+      const data=await response.json();
+      if(!response.ok||!data||!Array.isArray(data.items))throw new Error(data?.error||"HTTP "+response.status);
+      render(data);
+    }catch(error){
+      status("接続エラー","high");
+      const el=byId("newsList");
+      if(!el.querySelector(".news-item"))el.textContent="ニュースを取得できません。通信状態とNews Workerを確認してください。";
+    }
+  }
+  refreshNews();setInterval(refreshNews,300000);
+})();
+</script>
+</body></html>
