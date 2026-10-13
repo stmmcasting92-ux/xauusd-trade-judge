@@ -47,6 +47,10 @@ h1{margin:0;font-size:25px} .sub{color:#9fb0c9;font-size:12px}
 .im-note{font-size:13px;line-height:1.6;color:#dbe5f5;margin-top:10px}
 .im-foot{font-size:11px;color:#9fb0c9;margin-top:10px}
 
+
+/* Independent scenario panels; no changes to existing judge calculations */
+.scenario-value{font-size:19px;font-weight:800;margin:6px 0}.scenario-note{font-size:12px;line-height:1.65;color:#9fb0c9}.scenario-body{font-size:13px;line-height:1.75;color:#dbe5f5;white-space:pre-line}.news-ja{font-size:13px;color:#72e6ad;line-height:1.6;margin:5px 0}.scenario-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.scenario-grid>div{background:#0b1424;border:1px solid #25344d;border-radius:12px;padding:12px}
+
 /* FRB NEWS: existing judge logic remains independent */
 .news-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .news-pill{font-size:11px;padding:5px 9px;border-radius:999px;background:#26344c;color:#c4cedd}
@@ -130,13 +134,26 @@ h1{margin:0;font-size:25px} .sub{color:#9fb0c9;font-size:12px}
 <div id="hj-slot"></div>
 
 
+
+<!-- Independent technical scenarios: do not alter FINAL JUDGE -->
+<div class="card" id="scenario-panel">
+  <div class="section-title">XAUUSD 想定レンジ・戦略（テクニカル参考）</div>
+  <div class="scenario-grid">
+    <div><div class="label">短期（1〜15分）</div><div class="scenario-value" id="rangeShort">算出待ち</div><div class="scenario-note" id="rangeShortBasis">レンジ上限・下限の受信待ち</div></div>
+    <div><div class="label">当日（参考ゾーン）</div><div class="scenario-value" id="rangeDay">算出待ち</div><div class="scenario-note" id="rangeDayBasis">1Hゾーンを参考表示。日足予測ではありません</div></div>
+  </div>
+  <div class="row"><span class="label">現在の優勢方向</span><b id="strategyBias">--</b></div>
+  <div id="strategyBody" class="scenario-body">TradingViewデータを確認しています。</div>
+  <div class="scenario-note">短期は受信した初動検知レンジ、当日は1Hゾーンを表示します。両方とも将来価格の予測区間ではありません。日中高安値やATRが未連携のため、当日の予想高値・安値は算出しません。データ停止時は戦略を表示しません。</div>
+</div>
+
 <!-- FRB official news: independent panel; does not affect FINAL JUDGE -->
 <div class="card" id="news-panel">
   <div class="news-head"><div class="section-title" style="margin:0">XAUUSD NEWS / FRB公式情報</div><span id="newsStatus" class="news-pill">取得中</span></div>
   <div class="row"><span class="label">重要度（取得記事内の最高値）</span><b id="newsRisk">--</b></div>
   <div class="row"><span class="label">最終収集</span><b id="newsUpdated">--</b></div>
   <div id="newsList" class="news-list"><div class="news-msg">ニュースを取得しています...</div></div>
-  <div class="news-msg">公式FRBの見出しを自動取得。重要度は見出しの分類であり、現在の売買方向や値動きの予測ではありません。記事の公開日時を確認してください。</div>
+  <div class="news-msg">公式FRBの見出しを自動取得。日本語は定型表現のみの部分訳です。重要度は見出しの分類であり、現在の売買方向や値動きの予測ではありません。記事の公開日時を確認してください。</div>
 </div>
 <div class="small">相場データは10秒ごと、ニュースは5分ごとに確認</div>
 </main>
@@ -470,6 +487,40 @@ function renderInitial(d){
   $("imFresh").textContent=(stale?"⚠ データ更新停止 ｜ ":"")+"スコアは条件一致度であり、勝率・方向確率ではありません。";
 }
 
+
+/* Read-only scenario generator. Never modifies FINAL JUDGE. */
+function renderScenarios(d){
+  const num=k=>{const v=d[k];return v===null||v===undefined||v===""?NaN:Number(v)};
+  const price=num("price"), sh=num("range_high"), sl=num("range_low"), dh=num("zone_high_1h"), dl=num("zone_low_1h");
+  const received=Date.parse(d.received_at||"");
+  const stale=!Number.isFinite(received)||Date.now()-received>180000||received-Date.now()>60000;
+  const valid=(lo,hi)=>Number.isFinite(lo)&&Number.isFinite(hi)&&hi>lo;
+  const show=(id,lo,hi)=>document.getElementById(id).textContent=valid(lo,hi)?lo.toFixed(2)+" 〜 "+hi.toFixed(2):"データ不足";
+  show("rangeShort",sl,sh);show("rangeDay",dl,dh);
+  document.getElementById("rangeShortBasis").textContent=valid(sl,sh)?"初動検知レンジ（1〜15分の監視基準）":"初動レンジが未検知";
+  document.getElementById("rangeDayBasis").textContent=valid(dl,dh)?"1Hゾーン（当日の参考水準・予測値ではない）":"1Hゾーンが未取得";
+  const bias=document.getElementById("strategyBias"),body=document.getElementById("strategyBody");
+  if(stale||!Number.isFinite(price)){bias.textContent="停止 / WAIT";body.textContent="価格データが古いか取得できません。新規エントリー判断には使用しないでください。";return;}
+  const tf=[d["4h"],d["1h"],d["15m"],d["5m"]].map(x=>String(x||"").toUpperCase());
+  const ups=tf.filter(x=>x==="UP").length,downs=tf.filter(x=>x==="DOWN").length;
+  const direction=ups>=3?"上方向優勢":downs>=3?"下方向優勢":"方向不一致 / WAIT";
+  bias.textContent=direction;
+  const lines=[];
+  if(valid(sl,sh)){
+    if(price>sh) lines.push("短期：上限 "+sh.toFixed(2)+" を上抜け。終値維持・リテスト成功を確認するまで追いかけ買いを控える。");
+    else if(price<sl) lines.push("短期：下限 "+sl.toFixed(2)+" を下抜け。終値維持・リテスト成功を確認するまで追いかけ売りを控える。");
+    else lines.push("短期："+sl.toFixed(2)+"〜"+sh.toFixed(2)+" の内側。ブレイク確定までは見送りを優先。");
+  }else lines.push("短期：初動レンジ未取得のため価格条件を提示できません。");
+  if(valid(dl,dh)){
+    if(price>dh) lines.push("当日参考：1H上限 "+dh.toFixed(2)+" の上側。上限への押し戻しと維持を確認。");
+    else if(price<dl) lines.push("当日参考：1H下限 "+dl.toFixed(2)+" の下側。下限への戻りと反落を確認。");
+    else lines.push("当日参考：1Hゾーン "+dl.toFixed(2)+"〜"+dh.toFixed(2)+" の内側。上限・下限への接近に警戒。");
+  }else lines.push("当日参考：1Hゾーン未取得。日中の高値・安値予測はできません。");
+  lines.push("戦略："+(ups>=3?"上位足が上方向優勢。押し目候補を確認し、5分・1分足の反発を待つ。":downs>=3?"上位足が下方向優勢。戻り候補を確認し、5分・1分足の反落を待つ。":"時間足が一致しないため新規エントリーは慎重に。"));
+  lines.push("無効化条件：根拠にしたレンジや1Hゾーンの反対側へ戻り、維持に失敗した場合はシナリオを再評価。損切り価格はエントリー前に別途設定。");
+  body.textContent=lines.join("\n\n");
+}
+
 async function refresh(){
   try {
     const r=await fetch(API+"?t="+Date.now(),{cache:"no-store"});
@@ -484,7 +535,7 @@ $("reason").textContent=d.reason||"判定待ち";
     $("ema20").textContent=fmt(d.ema20); $("ema75").textContent=fmt(d.ema75); $("ema200").textContent=fmt(d.ema200);
     $("near").textContent=val(d.near_ema200); dir("env",d.environment);
     $("zh").textContent=val(d.zone_high_1h); $("zl").textContent=val(d.zone_low_1h);
-    $("received").textContent=d.received_at?new Date(d.received_at).toLocaleTimeString("ja-JP"): "--"; syncAutoStates(d); renderFinal(d); feedHold(d); renderInitial(d);
+    $("received").textContent=d.received_at?new Date(d.received_at).toLocaleTimeString("ja-JP"): "--"; syncAutoStates(d); renderFinal(d); feedHold(d); renderInitial(d); renderScenarios(d);
     $("updated").textContent="画面更新 "+new Date().toLocaleTimeString("ja-JP");
     const age=d.received_at?(Date.now()-new Date(d.received_at).getTime())/60000:null;
     if(age!==null&&age>3){$("live").textContent="データ停止中（"+Math.floor(age)+"分前）";$("dot").className="dot err";}
@@ -506,6 +557,24 @@ if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
 /* FRB official RSS news; independent of the trading signal logic. */
 (function(){
   const NEWS_API="https://xauusd-news.stmm-casting92.workers.dev/";
+  const translations=[
+    [/^Minutes of the Federal Open Market Committee/i,"米連邦公開市場委員会（FOMC）議事要旨"],
+    [/^Federal Reserve Board releases results of/i,"FRBが結果を公表："],
+    [/^Federal Reserve Board announces/i,"FRBが発表："],
+    [/^Federal Reserve issues/i,"FRBが公表："],
+    [/^Waller, /i,"ウォラー理事："],
+    [/^Bowman, /i,"ボウマン理事："],
+    [/^Powell, /i,"パウエル議長："],
+    [/^Federal Open Market Committee announces/i,"FOMCが発表："]
+  ];
+  function japaneseHeadline(title){
+    for(const [re,ja] of translations){if(re.test(title)){
+      const rest=title.replace(re,"").trim();
+      return ja+(rest?"（詳細は英語原文を確認："+rest+"）":"");
+    }}
+    return "日本語定型訳なし（英語原文を参照）";
+  }
+
   const byId=id=>document.getElementById(id);
   const level={HIGH:3,ELEVATED:2,NORMAL:1};
   function dateLabel(v){
@@ -531,7 +600,8 @@ if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js");
       for(const part of [String(item.risk||"NORMAL"),String(item.category||item.topic||"FRB"),dateLabel(item.published)]){
         const span=document.createElement("span");span.textContent=part;meta.append(span);
       }
-      box.append(a,meta);list.append(box);
+      const ja=document.createElement("div");ja.className="news-ja";ja.textContent=japaneseHeadline(String(item.title||""));
+      box.append(ja,a,meta);list.append(box);
     }
   }
   async function refreshNews(){
